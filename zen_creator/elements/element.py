@@ -13,6 +13,7 @@ from pathlib import Path
 
 from zen_creator.utils.attribute import Attribute
 from zen_creator.utils.registry import Registry
+from zen_creator.utils.utils import get_energy_unit_from_power_unit
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
         self.model: Model = model
         self.config: Config = model.config
         self.power_unit: str = power_unit
+        self.energy_unit:str = get_energy_unit_from_power_unit(power_unit)
 
     # ----------- properties ------------------------------------------
 

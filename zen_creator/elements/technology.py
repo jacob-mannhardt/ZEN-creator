@@ -80,13 +80,13 @@ class Technology(Element, ABC):
         self._capacity_existing = Attribute(
             "capacity_existing",
             default_value=0.0,
-            unit=f"{self.power_unit}",
+            unit=self.power_unit,
             element=self,
         )
         self._capacity_limit = Attribute(
             "capacity_limit",
             default_value=np.inf,
-            unit=f"{self.power_unit}",
+            unit=self.power_unit,
             element=self,
         )
         self._min_load = Attribute(
@@ -98,7 +98,7 @@ class Technology(Element, ABC):
         self._opex_specific_variable = Attribute(
             "opex_specific_variable",
             default_value=0.0,
-            unit=f"Euro/({self.power_unit}*h)",
+            unit=f"Euro/({self.energy_unit})",
             element=self,
         )
         self._opex_specific_fixed = Attribute(
@@ -110,7 +110,7 @@ class Technology(Element, ABC):
         self._carbon_intensity_technology = Attribute(
             "carbon_intensity_technology",
             default_value=0.0,
-            unit=f"kilotons/({self.power_unit}*h)",
+            unit=f"kilotons/({self.energy_unit})",
             element=self,
         )
         self._construction_time = Attribute(
@@ -119,7 +119,7 @@ class Technology(Element, ABC):
         self._capacity_investment_existing = Attribute(
             "capacity_investment_existing",
             default_value=0.0,
-            unit=f"{self.power_unit}",
+            unit=self.power_unit,
             element=self,
         )
         self._max_diffusion_rate = Attribute(
