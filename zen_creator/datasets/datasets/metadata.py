@@ -32,6 +32,7 @@ class MetaData(Subscriptable):
     publication_year: int
     url: Optional[str] = None
     doi: Optional[str] = None
+    note: Optional[str] = None
 
     def to_dict(self) -> dict[str, object]:
         """Serialize metadata to a dictionary.
@@ -63,6 +64,8 @@ class MetaData(Subscriptable):
             citation += f" https://doi.org/{self.doi}"
         elif self.url:
             citation += f" {self.url}"
+        if self.note:
+            citation += f". Note: {self.note}"
         return citation
 
 
