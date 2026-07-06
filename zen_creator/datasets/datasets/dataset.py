@@ -103,14 +103,19 @@ class Dataset(ABC, Generic[T], metaclass=SingletonRegistryMeta):
     @data.setter
     def data(self, value: T) -> None:
         # runtime type check
-        if isinstance(value, pd.DataFrame):
+        if isinstance(value, pd.DataFrame) or isinstance(value, pd.Series):
             self._data = value
         elif isinstance(value, dict):
-            if not all(
-                isinstance(k, str) and isinstance(v, pd.DataFrame)
-                for k, v in value.items()
-            ):
-                raise TypeError("data must be dict[str, DataFrame]")
+            all_k_str = all(isinstance(k, str) for k in value.keys())
+            all_v_df = all(isinstance(v, pd.DataFrame) for v in value.values())
+            all_v_series = all(isinstance(v, pd.Series) for v in value.values())
+            if not all_k_str:
+                raise TypeError("All keys in the data dictionary must be strings.")
+            if not (all_v_df or all_v_series):
+                raise TypeError(
+                    "All values in the data dictionary " \
+                    "must be either pandas DataFrames or Series."
+                )
             self._data = value
         else:
             raise TypeError(

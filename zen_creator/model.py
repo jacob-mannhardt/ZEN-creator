@@ -22,6 +22,7 @@ from zen_creator.elements import (
 from zen_creator.elements.element import Element
 from zen_creator.sectors import Sector
 from zen_creator.utils.config import Config, ElementTypeList
+from zen_creator.utils.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,11 @@ class Model:
 
     Attributes:
         config (Config): The configuration object for the model.
+        settings (Settings): Extensible, type-checked settings tree.
+            ZEN-creator itself defines no concrete settings categories;
+            downstream projects register ``SettingsCategory`` subclasses
+            (e.g. a ``TimeSettings`` with ``name = "time_settings"``), which
+            then become queryable as ``model.settings.time_settings.<field>``.
         name (str): The name of the model.
         output_folder (Path): The folder where the model output will be saved.
         source_path (Path): The path to the source data.
@@ -49,6 +55,7 @@ class Model:
 
         # internal variables for properties
         self.config: Config = Config()
+        self.settings: Settings = Settings()
         self.name: str = self.config.name
         self._output_folder: Optional[Path] = None
         self._source_path: Optional[Path] = None
@@ -83,6 +90,9 @@ class Model:
 
         model.config = (
             config if isinstance(config, Config) else Config.load_from_yaml(config)
+        )
+        model.settings = (
+            Settings() if isinstance(config, Config) else Settings.load_from_yaml(config)
         )
         model.name = model.config.name
         model.output_folder = model.config.output_folder

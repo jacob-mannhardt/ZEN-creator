@@ -41,6 +41,10 @@ class Config(Subscriptable):
         with open(config_path, "r", encoding="utf-8") as f:
             user_dict = yaml.safe_load(f) or {}
 
+        # `settings:` is validated separately by Settings.load_from_yaml();
+        # Config itself has extra="forbid", so this key must be stripped.
+        user_dict.pop("settings", None)
+
         config = cls.model_validate(user_dict)
         config.validate_config()
 

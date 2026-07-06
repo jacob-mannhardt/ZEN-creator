@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from zen_creator.model import Model
     from zen_creator.utils.attribute import Attribute
     from zen_creator.utils.config import Config
+    from zen_creator.utils.settings import Settings
 import json
 from pathlib import Path
 
@@ -48,6 +49,7 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
         # set public attribute values
         self.model: Model = model
         self.config: Config = model.config
+        self.settings: Settings = model.settings
         self.power_unit: str = power_unit
         self.energy_unit:str = get_energy_unit_from_power_unit(power_unit)
 
