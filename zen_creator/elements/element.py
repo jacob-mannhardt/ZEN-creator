@@ -141,9 +141,16 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
             TypeError: If value is not an Attribute instance.
         """
         if not isinstance(value, Attribute):
-            raise TypeError(
-                f"Value must be an instance of Attribute, got {type(value)}"
-            )
+            if value is None:
+                raise TypeError(
+                    f"No attribute returned for '{self.name}'. "
+                    "Ensure that all _set_<attribute_name> methods "
+                    "return an Attribute instance."
+                )
+            else:
+                raise TypeError(
+                    f"Setter returned {type(value)}, must be an instance of Attribute"
+                )
 
     def write(self):
         """Write the element to disk.

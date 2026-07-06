@@ -67,6 +67,7 @@ class TemplateDataset(Dataset[pd.DataFrame]):
             publication="Journal of Reliability and Risk Engineering",
             publication_year=2026,
             url="https://example.com/dataset.csv",
+            note="You can add any additional notes about the dataset here.",
         )
 
     def _set_path(self) -> Path | None:
