@@ -3,6 +3,29 @@
 This file gets automatically updated in ZEN-creator's continuous integration 
 procedures. Do not edit the file manually.
 
+## [v1.5.0] - 2026-06-17 
+
+### New Features ✨
+- add lower capacity limit parameter. [[🔀 PR #52](https://github.com/ZEN-universe/ZEN-creator/pull/52) @jojoethz]
+
+### Maintenance Tasks 🧹
+- update test solutions to account for new parameter. [[🔀 PR #52](https://github.com/ZEN-universe/ZEN-creator/pull/52) @jojoethz]
+- upgrade `black` to patch security vulnerability. [[🔀 PR #55](https://github.com/ZEN-universe/ZEN-creator/pull/55) @csfunke]
+
+## [v1.4.0] - 2026-06-15 
+
+### New Features ✨
+- write sources to sources.md along attribute.json files. [[🔀 PR #53](https://github.com/ZEN-universe/ZEN-creator/pull/53) @manud99]
+
+## [v1.3.1] - 2026-06-13 
+
+### Bug Fixes 🐛
+- fix default config creation for custom element configs. Calling ``Config()`` now creates default values for all element-specific configurations. [[🔀 PR #50](https://github.com/ZEN-universe/ZEN-creator/pull/50) @csfunke]
+- repair ``sources_to_str()`` for elements by updating function call name. [[🔀 PR #50](https://github.com/ZEN-universe/ZEN-creator/pull/50) @csfunke]
+
+### Documentation Changes 📝
+- document element-specific configurations by adding them to the template files. [[🔀 PR #50](https://github.com/ZEN-universe/ZEN-creator/pull/50) @csfunke]
+
 ## [v1.3.0] - 2026-06-11 
 
 ### New Features ✨
