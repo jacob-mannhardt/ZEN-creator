@@ -81,10 +81,10 @@ class DatasetCollection(ABC, metaclass=SingletonRegistryMeta):
                     "Data must be a dictionary of with keys "
                     f"of type `str`, got '{type(k).__name__}' instead."
                 )
-            if not isinstance(v, Dataset):
+            if not isinstance(v, Dataset) and not isinstance(v, DatasetCollection):
                 raise TypeError(
                     "Data must be a dictionary of with "
-                    "values of type `Dataset`, got "
+                    "values of type `Dataset` or `DatasetCollection`, got "
                     f"'{type(v).__name__}' instead."
                 )
         self._data = value

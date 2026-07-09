@@ -857,6 +857,6 @@ class Model:
 
         if not carriers.issubset(set(self.carriers)):
             raise ValueError(
-                f"The following carriers, used by technologies, are not "
+                f"The following carriers, used by technologies, are "
                 f"missing from the model {carriers.difference(self.carriers)}."
             )
