@@ -10,7 +10,7 @@ from pathlib import Path
 from zen_creator.utils.singleton_registry_meta import SingletonRegistryMeta
 
 from ..datasets.dataset import Dataset
-from ..datasets.metadata import MetaData
+from ..datasets.metadata import MetadataTree
 
 
 class DatasetCollection(ABC, metaclass=SingletonRegistryMeta):
@@ -91,13 +91,17 @@ class DatasetCollection(ABC, metaclass=SingletonRegistryMeta):
 
     # ----------- metadata -----------------------------
     @property
-    def metadata(self) -> Dict[str, MetaData]:
+    def metadata(self) -> Dict[str, MetadataTree]:
         """Metadata for all datasets in the collection.
 
+        Each value is either a single MetaData object (for an atomic Dataset)
+        or a nested dictionary of the same shape (for a DatasetCollection
+        composed of other DatasetCollections).
+
         Returns:
-            Dict[str, MetaData]: Dictionary mapping dataset names to metadata.
+            Dict[str, MetadataTree]: Dictionary mapping dataset names to metadata.
         """
-        metadata: Dict[str, MetaData] = {}
+        metadata: Dict[str, MetadataTree] = {}
         for name, dataset in self.data.items():
             metadata[name] = dataset.metadata
         return metadata
