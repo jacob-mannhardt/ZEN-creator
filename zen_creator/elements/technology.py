@@ -24,6 +24,9 @@ class Technology(Element, ABC):
 
         # attributes which are added in this class
         self._subclass_attribute_names = [
+            "reference_carrier",
+            "lifetime",
+            "construction_time",
             "capacity_addition_min",
             "capacity_addition_max",
             "capacity_addition_unbounded",
@@ -35,11 +38,8 @@ class Technology(Element, ABC):
             "opex_specific_variable",
             "opex_specific_fixed",
             "carbon_intensity_technology",
-            "construction_time",
             "capacity_investment_existing",
             "max_diffusion_rate",
-            "lifetime",
-            "reference_carrier",
         ]
         self._attribute_names.extend(self._subclass_attribute_names)
 
