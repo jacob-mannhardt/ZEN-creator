@@ -153,3 +153,34 @@ class SourceInformation(Subscriptable):
             else:
                 lines.append(f"{indent}- **{name}**: {value.to_str()}")
         return lines
+
+class AssumptionInformation(Subscriptable):
+    """Information about the assumptions used in a dataset attribute.
+
+    Combines a descriptive explanation of an attribute's assumptions.
+    An assumption is not a source of data, but rather a choice made 
+    in the modeling process that affects the attribute's value. 
+    Assumptions do not have associated citation metadata, 
+    but they may have a description of the rationale behind the assumption.
+    
+    Attributes:
+        description: Narrative explanation of the attribute's assumptions, collection
+            method, or data processing applied.
+    """
+
+    model_config = ConfigDict(strict=True)
+
+    description: str
+    metadata: Optional[MetadataTree] = None
+
+    def to_str(self) -> str:
+        """Generate a formatted string with description.
+
+        Produces a human-readable text block combining the source description.
+
+        Returns:
+            str: Multi-line string with description
+        """
+        lines = [self.description]
+
+        return "\n".join(lines)

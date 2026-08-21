@@ -149,7 +149,9 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
                 )
             else:
                 raise TypeError(
-                    f"Setter returned {type(value)}, must be an instance of Attribute"
+                    f"Setter returned {type(value)} for '{self.name}',"
+                    " must be an instance of Attribute, "
+                    f"but got {type(value)}."
                 )
 
     def write(self):

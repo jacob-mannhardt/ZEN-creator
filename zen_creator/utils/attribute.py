@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Union
 import numpy as np
 import pandas as pd
 
-from zen_creator.datasets.datasets.metadata import SourceInformation
+from zen_creator.datasets.datasets.metadata import AssumptionInformation, SourceInformation
 
 if TYPE_CHECKING:
     from zen_creator.elements.element import Element
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # Type aliases for better readability
 DataFrame = Union[pd.DataFrame, pd.Series]
 DefaultValue = Union[float, list, None]
+SourceLike = Union[SourceInformation, AssumptionInformation]
 
 # Constants for validation
 _ATTRIBUTES_SUPPORTING_LISTS = {
@@ -88,7 +89,7 @@ class Attribute:
         df: DataFrame | None = None,
         year_specific_dfs: dict[int, DataFrame] | None = None,
         yearly_variations_df: DataFrame | None = None,
-        sources: list[SourceInformation] | None = None,
+        sources: list[SourceLike] | None = None,
     ):
         """Initialize an Attribute.
 
@@ -111,7 +112,7 @@ class Attribute:
         self._df: DataFrame | None = None
         self._yearly_variations_df: DataFrame | None = None
         self._year_specific_dfs: dict[int, DataFrame] = {}
-        self._sources: list[SourceInformation] = []
+        self._sources: list[SourceLike] = []
 
         # Use setters to ensure validation is applied during initialization
         self.base_technology = base_technology
@@ -211,7 +212,8 @@ class Attribute:
         if value is not None:
             if self._df is not None:
                 logger.warning(
-                    f"Overwriting existing data for attribute '{self.name}'."
+                    f"Overwriting existing data for attribute '{self.name}' "
+                    f"of element '{self.element.name}'."
                 )
             self._validate_dataframe_indices(value, _ALLOWED_DF_INDEX_NAMES)
 
@@ -236,12 +238,13 @@ class Attribute:
             if self.year_specific_dfs:
                 raise ValueError(
                     f"Cannot set yearly variations data for attribute '{self.name}' "
+                    f"of element '{self.element.name}' "
                     f"when year-specific time series data is present."
                 )
             if self._yearly_variations_df is not None:
                 logger.warning(
                     f"Overwriting existing yearly variations data for "
-                    f"attribute '{self.name}'."
+                    f"attribute '{self.name}' of element '{self.element.name}'."
                 )
             self._validate_dataframe_indices(
                 value, _ALLOWED_YEARLY_VARIATIONS_INDEX_NAMES
@@ -287,16 +290,16 @@ class Attribute:
         self._year_specific_dfs = value
 
     @property
-    def sources(self) -> list[SourceInformation]:
+    def sources(self) -> list[SourceLike]:
         """Get the ordered source information entries."""
         return self._sources
 
     @sources.setter
-    def sources(self, value: list[SourceInformation]) -> None:
+    def sources(self, value: list[SourceLike]) -> None:
         """Set ordered source information entries.
 
         Args:
-            value: Ordered list of SourceInformation objects.
+            value: Ordered list of SourceInformation/AssumptionInformation objects.
         """
         if not isinstance(value, list):
             raise ValueError(
@@ -305,24 +308,25 @@ class Attribute:
             )
 
         for i, source_info in enumerate(value):
-            if not isinstance(source_info, SourceInformation):
+            if not isinstance(source_info, (SourceInformation, AssumptionInformation)):
                 raise ValueError(
                     f"Entry {i} in sources for attribute '{self.name}' must be a "
-                    f"SourceInformation object. Got {type(source_info).__name__}."
+                    f"SourceInformation or AssumptionInformation object. "
+                    f"Got {type(source_info).__name__}."
                 )
 
         self._sources = list(value)
 
-    def add_source(self, source: SourceInformation) -> None:
+    def add_source(self, source: SourceLike) -> None:
         """Append a source entry while preserving insertion order.
 
         Args:
-            source: Source information to append.
+            source: Source or assumption information to append.
         """
-        if not isinstance(source, SourceInformation):
+        if not isinstance(source, (SourceInformation, AssumptionInformation)):
             raise ValueError(
                 f"Source for attribute '{self.name}' must be a SourceInformation "
-                f"object. Got {type(source).__name__}."
+                f"or AssumptionInformation object. Got {type(source).__name__}."
             )
         self._sources.append(source)
 
@@ -330,7 +334,7 @@ class Attribute:
 
     def set_data(
         self,
-        source: SourceInformation,
+        source: SourceLike,
         default_value: DefaultValue = None,
         unit: str | None = None,
         df: DataFrame | None = None,
@@ -341,7 +345,9 @@ class Attribute:
         This is a convenience method for setting multiple properties in a chain.
         The source parameter is mandatory. It should contain a SourceInformation
         object that includes a description of changes and the corresponding
-        Dataset/DatasetCollection MetaData to ensure proper source tracking.
+        Dataset/DatasetCollection MetaData to ensure proper source tracking, or an
+        AssumptionInformation object when the value stems from a modeling choice
+        rather than an external data source.
 
         Args:
             default_value: Default value for the attribute.

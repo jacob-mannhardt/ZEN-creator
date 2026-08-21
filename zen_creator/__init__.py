@@ -1,6 +1,7 @@
 import logging
 
 from .datasets import (
+    AssumptionInformation,
     Dataset,
     DatasetCollection,
     MetaData,
@@ -55,6 +56,7 @@ __all__ = [
     "TechnoEconomicDataset",
     "Attribute",
     "SourceInformation",
+    "AssumptionInformation",
     "TechnologyConfig",
     "CarrierConfig",
     "TransportTechnologyConfig",
