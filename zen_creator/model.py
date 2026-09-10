@@ -64,6 +64,11 @@ class Model:
         # initialize other attributes
         self.elements: dict[str, Element] = {}
 
+        # shared stack of (element, attribute_name) frames currently being
+        # auto-built, used to detect cyclic cross-attribute/cross-element
+        # dependencies; see Element._build_attribute
+        self._build_stack: list[tuple[Element, str]] = []
+
     @classmethod
     def from_config(cls, config: Config | str | Path):
         """Initialize a new Model instance.
@@ -706,6 +711,7 @@ class Model:
 
         # build carriers and technologies
         for element in self.elements.values():
+            logging.info(f"-------- Build element {element.name} --------")
             element.build()
 
     # -------- Write model -----------------------------------------------------

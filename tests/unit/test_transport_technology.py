@@ -22,11 +22,12 @@ from zen_creator.utils.compare_trees import compare_files
 def test_template_transport_technology_construction(
     model: Model,
 ):
-    """Construction sets class name and mandatory carrier defaults."""
+    """Construction sets class name; reading a carrier attribute's value
+    auto-builds it on demand, ahead of an explicit build()."""
     technology = TemplateTransportTechnology(model=model)
 
     assert technology.name == "template_transport_technology"
-    assert technology.reference_carrier.default_value == []
+    assert technology.reference_carrier.default_value == ["heat"]
 
 
 def test_template_transport_technology_build(

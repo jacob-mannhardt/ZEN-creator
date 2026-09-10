@@ -1,5 +1,7 @@
 from abc import ABCMeta
-from typing import Any
+from typing import Any, TypeVar
+
+_T = TypeVar("_T", bound=type)
 
 
 class SingletonRegistryMeta(ABCMeta):
@@ -7,7 +9,7 @@ class SingletonRegistryMeta(ABCMeta):
 
     _registries: dict[type, dict[str, object]] = {}
 
-    def __call__(cls, *args: Any, **kwargs: Any) -> object:
+    def __call__(cls: type[_T], *args: Any, **kwargs: Any) -> _T:
         """
         Ensure singleton behavior per class.
         Creates a registry for this class type if it doesn't exist.
@@ -32,7 +34,7 @@ class SingletonRegistryMeta(ABCMeta):
 
         return instance
 
-    def _register_in_parents(cls, instance: object) -> None:
+    def _register_in_parents(cls: type[_T], instance: _T) -> None:
         """Register the instance in parent class registries, up to the first class
         with the SingletonRegistryMeta metaclass."""
         # Check if the class has a parent (for subclassing support)
@@ -53,7 +55,7 @@ class SingletonRegistryMeta(ABCMeta):
             # necessary
             parent_class._register_in_parents(instance)
 
-    def get_by_name(cls, name: str) -> object:
+    def get_by_name(cls: type[_T], name: str) -> _T:
         """Return the singleton instance of this class type by name."""
         registry = cls._registries.get(cls, {})
         if name not in registry:
@@ -61,6 +63,6 @@ class SingletonRegistryMeta(ABCMeta):
         return registry[name]
 
     @property
-    def registry(cls) -> dict[str, object]:
+    def registry(cls: type[_T]) -> dict[str, _T]:
         """Return all registered instances of this class type."""
         return dict(cls._registries.get(cls, {}))

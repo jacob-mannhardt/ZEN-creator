@@ -67,6 +67,23 @@ _UNIT_REPLACEMENTS = {
     "/h*h": "",
 }
 
+# Fields that carry an attribute's actual computed value. Reading one of
+# these (e.g. `element.lifetime.default_value`) is what triggers auto-build
+# of an unbuilt attribute, see Attribute.__getattribute__. Fetching the
+# Attribute object itself (`element.lifetime`) or calling a method on it
+# (`.set_data(...)`) does not, since neither consumes the value.
+_DATA_FIELDS = frozenset(
+    {
+        "default_value",
+        "unit",
+        "base_technology",
+        "df",
+        "year_specific_dfs",
+        "yearly_variations_df",
+        "sources",
+    }
+)
+
 
 class Attribute:
     """Represents a single attribute of an energy system element.
@@ -123,6 +140,43 @@ class Attribute:
         self.yearly_variations_df = yearly_variations_df
         self.sources = sources or []
         self.base_technology = base_technology
+
+    def __getattribute__(self, name: str):
+        """Return the requested field, auto-building an unbuilt attribute first.
+
+        Only fields in ``_DATA_FIELDS`` (the actual data - default_value, df,
+        etc.) trigger anything; fetching the Attribute object itself or
+        calling a method on it never does, since neither of those consumes a value.
+
+        For a data field belonging to an unbuilt attribute with a
+        ``_set_<name>`` setter, that setter is run now (via
+        ``Element._build_attribute``).
+
+        Because a setter may replace rather than mutate the Attribute object
+        (``setattr(element, name, new_attribute)``), ``self`` can end up
+        stale - e.g. a reference captured before the (re)build. So the field
+        is always read off whatever is currently registered on the element,
+        redirecting there if it differs from ``self``.
+        """
+        if name in _DATA_FIELDS:
+            element = object.__getattribute__(self, "element")
+            attr_name = object.__getattribute__(self, "name")
+            stack = element.model._build_stack
+            is_self_reference = bool(stack) and stack[-1] == (element, attr_name)
+
+            if not is_self_reference and attr_name not in element._built_attribute_names:
+                if getattr(type(element), f"_set_{attr_name}", None) is not None:
+                    logger.info(
+                        f"Auto-building '{attr_name}' of '{element.name}' "
+                        f"(triggered by '{stack[-1][0].name}._set_{stack[-1][1]}')"
+                    )
+                    element._build_attribute(attr_name)
+
+            current = getattr(element, attr_name)
+            if current is not self:
+                return object.__getattribute__(current, name)
+
+        return object.__getattribute__(self, name)
 
     # ---------- Properties ----------
 
@@ -235,7 +289,7 @@ class Attribute:
             ValueError: If any index name is not allowed.
         """
         if value is not None:
-            if self.year_specific_dfs:
+            if self._year_specific_dfs:
                 raise ValueError(
                     f"Cannot set yearly variations data for attribute '{self.name}' "
                     f"of element '{self.element.name}' "
@@ -270,7 +324,7 @@ class Attribute:
         Raises:
             ValueError: If any index name is not allowed.
         """
-        if (self.yearly_variations_df is not None) and value:
+        if (self._yearly_variations_df is not None) and value:
             raise ValueError(
                 f"Cannot set year-specific data for attribute"
                 f"'{self.name}' when yearly variations data is present."

@@ -155,12 +155,12 @@ class EnergySystem(Element, ABC):
             ],
             element=self,
         )
-        self.set_nodes = Attribute(
+        self._set_nodes = Attribute(
             "set_nodes",
             default_value=None,
             element=self,
         )
-        self.set_edges = Attribute(
+        self._set_edges = Attribute(
             "set_edges",
             default_value=None,
             element=self,

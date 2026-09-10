@@ -46,11 +46,9 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
         # Attributes that should be saved
         self._attribute_names: list[str] = []
 
-        # track build state so premature (pre-build) attribute reads can be
-        # flagged, see __getattribute__
+        # names of attributes whose _set_<name> setter has already run, see
+        # _build_attribute
         self._built_attribute_names: set[str] = set()
-        self._currently_building_attribute: str | None = None
-        self._warned_attribute_names: set[str] = set()
 
         # set public attribute values
         self.model: Model = model
@@ -58,48 +56,6 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
         self.settings: Settings = model.settings
         self.power_unit: str = power_unit
         self.energy_unit:str = get_energy_unit_from_power_unit(power_unit)
-
-    def __getattribute__(self, name: str):
-        """Return the requested attribute, warning on stale pre-build reads.
-
-        Every ``_set_<name>`` setter is only invoked by build(). Until then,
-        the public property for ``name`` still returns whatever default (or
-        overwrite_from_existing_model-loaded) value was set directly, which
-        is easy to mistake for the setter's output. If a setter exists for
-        ``name`` but hasn't produced its value yet, log a one-time warning.
-
-        The exception is a setter reading its own current value (e.g.
-        ``attr = self.lifetime`` inside ``_set_lifetime``) to mutate it in
-        place - that is the standard idiom, not a stale read, and is
-        exempted via ``_currently_building_attribute``.
-        """
-        value = object.__getattribute__(self, name)
-
-        instance_dict = object.__getattribute__(self, "__dict__")
-        attribute_names = instance_dict.get("_attribute_names")
-        if not attribute_names or name not in attribute_names:
-            return value
-
-        if name == instance_dict.get("_currently_building_attribute"):
-            return value
-
-        built = instance_dict.get("_built_attribute_names")
-        warned = instance_dict.get("_warned_attribute_names")
-        if (
-            built is not None
-            and warned is not None
-            and name not in built
-            and name not in warned
-            and getattr(type(self), f"_set_{name}", None) is not None
-        ):
-            logger.warning(
-                f"'{name}' of '{object.__getattribute__(self, 'name')}' was "
-                f"read before the '_set_{name}' setter ran.\n\tThe "
-                "value may be stale rather than what the setter would compute."
-            )
-            warned.add(name)
-
-        return value
 
     # ----------- properties ------------------------------------------
 
@@ -164,11 +120,7 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
             existing_model_path (Path): Path to the existing model directory.
         """
         existing_element_path = existing_model_path / self.relative_output_path
-        # bypass __getattribute__'s pre-build warning: this loads raw data
-        # into every attribute regardless of build state by design, since
-        # build() (run afterwards) may then overwrite some of them again
-        for name in self._attribute_names:
-            attribute = object.__getattribute__(self, name)
+        for attribute in self.attributes.values():
             attribute.overwrite_from_existing_model(existing_element_path)
 
     def build(self):
@@ -179,12 +131,44 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
         methods.
         """
         for name in self._attribute_names:
-            setter = getattr(self, f"_set_{name}", None)
-            if setter:
-                self._currently_building_attribute = name
-                setattr(self, name, setter())
-                self._currently_building_attribute = None
-                self._built_attribute_names.add(name)
+            self._build_attribute(name)
+
+    def _build_attribute(self, name: str) -> None:
+        """Build a single attribute via its ``_set_<name>`` setter.
+
+        Idempotent: does nothing if ``name`` has already been built, or has
+        no ``_set_<name>`` setter (its default/loaded value is final). Safe
+        to call re-entrantly from within another attribute's setter - this
+        is how cross-attribute and cross-element dependencies (e.g. a
+        technology reading a related technology's already-built lifetime)
+        get built on demand regardless of ``_attribute_names`` order. See
+        ``Attribute.__getattribute__`` for the read-triggered call site.
+
+        Raises:
+            RuntimeError: If ``name`` of this element is already being built
+                further up the call chain (a cyclic attribute dependency).
+        """
+        if name in self._built_attribute_names:
+            return
+        setter = getattr(self, f"_set_{name}", None)
+        if setter is None:
+            return
+
+        stack = self.model._build_stack
+        frame = (self, name)
+        if frame in stack:
+            chain = " -> ".join(f"{el.name}.{attr}" for el, attr in stack)
+            raise RuntimeError(
+                f"Cyclic attribute dependency detected: {chain} -> "
+                f"{self.name}.{name}"
+            )
+
+        stack.append(frame)
+        try:
+            setattr(self, name, setter())
+        finally:
+            stack.pop()
+        self._built_attribute_names.add(name)
 
     def _validate_attribute(self, value: Attribute) -> None:
         """Validate that the value is an Attribute instance.
