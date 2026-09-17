@@ -484,6 +484,10 @@ class Model:
     ) -> None:
         """Add an element to the model by its name.
 
+        If no class is registered under ``element_name`` and ``generic`` is
+        given, the corresponding generic class is used instead and a warning is
+        logged, since the resulting element only carries default values.
+
         Args:
             element (str): The name of the element to add.
 
@@ -711,7 +715,9 @@ class Model:
 
         # build carriers and technologies
         for element in self.elements.values():
-            logging.info(f"-------- Build element {element.name} --------")
+            logging.info(
+                f"-------- Build {element.__class__.__bases__[0].__name__} "
+                f"{element.name} --------")
             element.build()
 
     # -------- Write model -----------------------------------------------------

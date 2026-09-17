@@ -214,10 +214,10 @@ class Attribute:
 
     @base_technology.setter
     def base_technology(self, value: str | None) -> None:
-        """Set the unit of measurement.
+        """Set the base technology for retrofit_flow_coupling_factor with validation.
 
         Args:
-            value: The unit string (e.g., 'MW', 'EUR/MW').
+            value: The base technology name as a string.
         """
         if value is None:
             self._base_technology = value
@@ -393,6 +393,7 @@ class Attribute:
         unit: str | None = None,
         df: DataFrame | None = None,
         yearly_variations_df: DataFrame | None = None,
+        base_technology: str | None = None,
     ) -> Attribute:
         """Set multiple attribute properties at once.
 
@@ -408,6 +409,7 @@ class Attribute:
             unit: Unit of measurement.
             df: Time-series data.
             yearly_variations_df: Yearly variation factors.
+            base_technology: Name of the base technology.
             source: Source information to append to the ordered source list.
 
         Returns:
@@ -421,6 +423,8 @@ class Attribute:
             self.df = df
         if yearly_variations_df is not None:
             self.yearly_variations_df = yearly_variations_df
+        if base_technology is not None:
+            self.base_technology = base_technology
         self.add_source(source)
         return self
 
