@@ -13,7 +13,6 @@ class SystemConfig(Subscriptable):
     model_config = ConfigDict(extra="allow")
 
     set_nodes: list[str] = []
-    set_transport_technologies_loss_exponential: Optional[list[str]] = None
     use_existing_capacities: Optional[bool] = None
     allow_investment: Optional[bool] = None
     double_capex_transport: Optional[bool] = None

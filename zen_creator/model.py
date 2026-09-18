@@ -63,6 +63,7 @@ class Model:
 
         # initialize other attributes
         self.elements: dict[str, Element] = {}
+        self.sectors: set[str] = set()
 
         # shared stack of (element, attribute_name) frames currently being
         # auto-built, used to detect cyclic cross-attribute/cross-element
@@ -226,12 +227,29 @@ class Model:
     def _initialize_sectors(self, sector_names: list[str]) -> None:
         """Initialize model sectors by their registered names.
 
-        Each sector contributes its declared elements to ``self.elements`` via
+        Validates that every sector's ``required_sectors`` are also present in
+        ``sector_names`` before adding anything, then adds each sector via
         :meth:`add_sector_by_name`.
 
         Args:
             sector_names: List of sector names to add to the model.
+
+        Raises:
+            ValueError: If a sector name is not registered, or if a sector's
+                ``required_sectors`` are not all included in ``sector_names``.
         """
+        target = set(sector_names)
+        for sector in sector_names:
+            sector_cls = Sector._sector_registry.get(sector)
+            if sector_cls is None:
+                raise ValueError(f"Sector '{sector}' is not registered.")
+            missing = set(sector_cls.required_sectors) - target
+            if missing:
+                raise ValueError(
+                    f"Sector '{sector}' requires sector(s) {sorted(missing)}, "
+                    "which are not included in set_sectors."
+                )
+
         for sector in sector_names:
             self.add_sector_by_name(sector)
 
@@ -264,7 +282,8 @@ class Model:
                 self.add_element_by_name(element, element_type)
 
         # Remove sectors that should be excluded
-        # TODO:
+        for sector in exclude_config.set_sectors:
+            self.remove_sector_by_name(sector)
 
         # Remove technologies that should be excluded
         for element_set in element_map.keys():
@@ -663,6 +682,9 @@ class Model:
     def add_sector(self, sector_cls: Type[Sector]) -> None:
         """Add a sector to the model.
 
+        An element declared by more than one sector is only added once every
+        sector that declares it is active (see :meth:`_reconcile_sector_elements`).
+
         Args:
             sector_cls (Type[Sector]): The sector class to add.
 
@@ -677,13 +699,16 @@ class Model:
 
         logger.info(f"Add sector: {sector_cls.name} --------")
 
-        for element in sector_cls().elements:
-            self.add_element(element)
+        self.sectors.add(sector_cls.name)
+        self._reconcile_sector_elements()
 
         return
 
     def remove_sector(self, sector_cls: Type[Sector]) -> None:
         """Remove a sector from the model.
+
+        Removes exactly the elements this sector declares, regardless of
+        whether they are also declared by another still-active sector.
 
         Args:
             sector_cls (Type[Sector]): The sector class to remove.
@@ -699,8 +724,68 @@ class Model:
 
         logger.info(f"Remove sector: {sector_cls.name} --------")
 
+        self.sectors.discard(sector_cls.name)
+
         for element in sector_cls().elements:
             self.remove_element(element)
+
+    def remove_sector_by_name(self, sector: str) -> None:
+        """Remove a sector from the model by its name.
+
+        Args:
+            sector (str): The name of the sector to remove.
+
+        Raises:
+            TypeError: If sector is not a string.
+            ValueError: If the sector is not registered.
+
+        Examples:
+            >>> model.remove_sector_by_name("electricity")
+        """
+        if not isinstance(sector, str):
+            raise TypeError(
+                f"Expected a subclass of 'str', got '{type(sector).__name__}' instead."
+            )
+
+        sector_cls = Sector._sector_registry.get(sector)
+
+        if sector_cls is None:
+            raise ValueError(f"Sector '{sector}' is not registered.")
+
+        self.remove_sector(sector_cls)
+
+        return
+
+    def _element_owning_sectors(self) -> dict[Type[Element], set[str]]:
+        """Map every element declared by a registered sector to the set of
+        sector names that declare it.
+
+        Scans the full sector registry, not just currently active sectors, so
+        that AND-membership can be evaluated regardless of which sectors are
+        active yet.
+
+        Returns:
+            dict[Type[Element], set[str]]: Mapping of element class to the
+                names of every sector that declares it.
+        """
+        owning: dict[Type[Element], set[str]] = {}
+        for sector_cls in Sector._sector_registry.values():
+            for element in sector_cls().elements:
+                owning.setdefault(element, set()).add(sector_cls.name)
+        return owning
+
+    def _reconcile_sector_elements(self) -> None:
+        """Add every sector-declared element whose declaring sectors are all
+        active.
+
+        An element declared by a single sector is added as soon as that
+        sector is active. An element declared by several sectors (AND-membership)
+        is only added once every one of those sectors is active.
+        """
+        for element_cls, owning_sectors in self._element_owning_sectors().items():
+            if owning_sectors <= self.sectors:
+                if element_cls.name not in self.elements:
+                    self.add_element(element_cls)
 
     # ------- Building model ---------------------------------------------------
 
