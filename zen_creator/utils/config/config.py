@@ -1,5 +1,6 @@
 import importlib
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 
@@ -24,6 +25,7 @@ class Config(Subscriptable):
     system: SystemConfig = Field(default_factory=SystemConfig)
     energy_system: EnergySystemConfig = Field(default_factory=EnergySystemConfig)
     data: DataConfig = Field(default_factory=DataConfig)
+    scenarios: dict[str, dict[str, dict[str, Any]]] = {}
 
     @classmethod
     def load_from_yaml(cls, path: str | Path) -> "Config":

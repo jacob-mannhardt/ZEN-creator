@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 from zen_creator.datasets.datasets.metadata import MetaData, SourceInformation
 from zen_creator.elements.element import Element
 from zen_creator.utils.attribute import Attribute
+from zen_creator.utils.scenario import ENERGY_SYSTEM_KEY
 
 
 class EnergySystem(Element, ABC):
@@ -288,6 +289,15 @@ class EnergySystem(Element, ABC):
         self._set_edges = value
 
     # ---------- Property Overloads --------
+    @property
+    def scenario_key(self) -> str:
+        """Get the key of the energy system in scenarios.json.
+
+        Returns:
+            str: The name under which scenarios address the energy system.
+        """
+        return ENERGY_SYSTEM_KEY
+
     @property
     def relative_output_path(self) -> Path:
         """Get the relative output path for the energy system.

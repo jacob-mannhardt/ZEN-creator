@@ -70,6 +70,15 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
         return {name: getattr(self, name) for name in self._attribute_names}
 
     @property
+    def scenario_key(self) -> str:
+        """Get the key of this element in scenarios.json.
+
+        Returns:
+            str: The name under which scenarios address this element.
+        """
+        return self.name
+
+    @property
     def relative_output_path(self) -> Path:
         """Get the relative output path for this element.
 
@@ -240,6 +249,37 @@ class Element(ABC, Registry["Element"], is_base_registry=True):
         output = self.attributes_to_dict()
         with (out_path / "attributes.json").open("w") as f:
             json.dump(output, f, indent=4)
+
+        self.save_scenario_attributes(output)
+
+    def save_scenario_attributes(self, base_attributes: dict):
+        """Save one attributes file per scenario that changes a default value.
+
+        The scenario files hold a full copy of the attributes, with the default
+        values of the scenario applied, since ZEN-garden reads them in place of
+        'attributes.json'.
+
+        Args:
+            base_attributes (dict): The attributes of the default scenario.
+        """
+        overrides: dict[str, dict] = {}
+
+        for attr_name in self._attribute_names:
+            attr = getattr(self, attr_name)
+            for scenario in attr.scenarios.values():
+                if scenario.default_value is None:
+                    continue
+                overrides.setdefault(scenario.suffix, {})[attr_name] = (
+                    attr.scenario_default_to_dict(scenario)
+                )
+
+        out_path = self.output_path
+        for suffix, attributes in overrides.items():
+            logger.info(
+                f"Saving 'attributes_{suffix}.json' for element '{self.name}.'"
+            )
+            with (out_path / f"attributes_{suffix}.json").open("w") as f:
+                json.dump({**base_attributes, **attributes}, f, indent=4)
 
     def save_sources(self):
         """Save the element's sources to sources.md."""

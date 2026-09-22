@@ -17,7 +17,11 @@ from typing import TYPE_CHECKING, Any, Union
 import numpy as np
 import pandas as pd
 
-from zen_creator.datasets.datasets.metadata import AssumptionInformation, SourceInformation
+from zen_creator.datasets.datasets.metadata import (
+    AssumptionInformation,
+    SourceInformation,
+)
+from zen_creator.utils.scenario import Scenario
 
 if TYPE_CHECKING:
     from zen_creator.elements.element import Element
@@ -130,6 +134,7 @@ class Attribute:
         self._yearly_variations_df: DataFrame | None = None
         self._year_specific_dfs: dict[int, DataFrame] = {}
         self._sources: list[SourceLike] = []
+        self.scenarios: dict[str, Scenario] = {}
 
         # Use setters to ensure validation is applied during initialization
         self.base_technology = base_technology
@@ -164,7 +169,10 @@ class Attribute:
             stack = element.model._build_stack
             is_self_reference = bool(stack) and stack[-1] == (element, attr_name)
 
-            if not is_self_reference and attr_name not in element._built_attribute_names:
+            if (
+                not is_self_reference
+                and attr_name not in element._built_attribute_names
+            ):
                 if getattr(type(element), f"_set_{attr_name}", None) is not None:
                     logger.info(
                         f"Auto-building '{attr_name}' of '{element.name}' "
@@ -195,6 +203,21 @@ class Attribute:
         Raises:
             ValueError: If the value type is not valid for this attribute.
         """
+        self._validate_default_value(value)
+        self._default_value = value
+
+    def _validate_default_value(self, value: DefaultValue) -> None:
+        """Validate a default value for this attribute.
+
+        Used both for the attribute's own default value and for the default
+        values of its scenario variations, so the two follow the same rules.
+
+        Args:
+            value: The default value to validate.
+
+        Raises:
+            ValueError: If the value type is not valid for this attribute.
+        """
         if isinstance(value, list):
             self._validate_list_default_value(value)
         elif value is not None and not isinstance(
@@ -204,8 +227,6 @@ class Attribute:
                 f"Attribute '{self.name}' default value must be a float, int, or list. "
                 f"Got {type(value).__name__}."
             )
-
-        self._default_value = value
 
     @property
     def base_technology(self) -> str | None:
@@ -394,6 +415,7 @@ class Attribute:
         df: DataFrame | None = None,
         yearly_variations_df: DataFrame | None = None,
         base_technology: str | None = None,
+        scenarios: Scenario | list[Scenario] | None = None,
     ) -> Attribute:
         """Set multiple attribute properties at once.
 
@@ -411,9 +433,21 @@ class Attribute:
             yearly_variations_df: Yearly variation factors.
             base_technology: Name of the base technology.
             source: Source information to append to the ordered source list.
+            scenarios: Variations of this attribute in a scenario analysis.
 
         Returns:
             Self for method chaining.
+
+        Examples:
+            >>> attribute.set_data(
+            ...     source=source,
+            ...     default_value=3.0,
+            ...     unit="Euro/MWh",
+            ...     scenarios=[
+            ...         Scenario("cheap", default_value=1.5),
+            ...         Scenario("sweep", default_op=[0.5, 1.5]),
+            ...     ],
+            ... )
         """
         if default_value is not None:
             self.default_value = default_value
@@ -425,8 +459,68 @@ class Attribute:
             self.yearly_variations_df = yearly_variations_df
         if base_technology is not None:
             self.base_technology = base_technology
+        if scenarios is not None:
+            self.add_scenarios(scenarios)
         self.add_source(source)
         return self
+
+    def add_scenarios(self, scenarios: Scenario | list[Scenario]) -> None:
+        """Attach scenario variations to this attribute.
+
+        The variations are registered with the model right away, so that the
+        scenario file is complete before the model is written.
+
+        Args:
+            scenarios: A single variation or a list of variations.
+
+        Raises:
+            ValueError: If a scenario is already attached to this attribute, or
+                if a variation's data does not follow the same rules as the
+                attribute's own data.
+        """
+        if isinstance(scenarios, Scenario):
+            scenarios = [scenarios]
+
+        for scenario in scenarios:
+            if not isinstance(scenario, Scenario):
+                raise ValueError(
+                    f"Scenario of attribute '{self.name}' must be a Scenario "
+                    f"object. Got {type(scenario).__name__}."
+                )
+            self._validate_scenario(scenario)
+            if scenario.name in self.scenarios:
+                raise ValueError(
+                    f"Scenario '{scenario.name}' is already defined for attribute "
+                    f"'{self.name}' of element '{self.element.name}'."
+                )
+
+            self.scenarios[scenario.name] = scenario
+            self.element.model.scenarios.register_scenario(
+                self.element.scenario_key, self.name, scenario
+            )
+
+    def _validate_scenario(self, scenario: Scenario) -> None:
+        """Validate a scenario variation against the rules of this attribute.
+
+        Reuses the same validation as the attribute's own default value and
+        data, so a variation cannot hold data the attribute would otherwise
+        reject.
+
+        Args:
+            scenario: The scenario variation to validate.
+
+        Raises:
+            ValueError: If the variation's default value or data is invalid
+                for this attribute.
+        """
+        if scenario.default_value is not None:
+            self._validate_default_value(scenario.default_value)
+        if scenario.df is not None:
+            self._validate_dataframe_indices(scenario.df, _ALLOWED_DF_INDEX_NAMES)
+        if scenario.yearly_variations_df is not None:
+            self._validate_dataframe_indices(
+                scenario.yearly_variations_df, _ALLOWED_YEARLY_VARIATIONS_INDEX_NAMES
+            )
 
     # ---------- Model Data Methods ----------
 
@@ -519,7 +613,37 @@ class Attribute:
         Raises:
             ValueError: If the default value type is not serializable.
         """
-        default_value = self._convert_default_value_to_serializable()
+        return self._default_to_dict(self.default_value, self.unit)
+
+    def scenario_default_to_dict(self, scenario: Scenario) -> dict | list[dict]:
+        """Convert the default value of a scenario variation.
+
+        Args:
+            scenario: The variation whose default value is serialized.
+
+        Returns:
+            Dictionary with 'default_value' and 'unit' keys.
+        """
+        unit = scenario.unit if scenario.unit is not None else self.unit
+
+        return self._default_to_dict(scenario.default_value, unit)
+
+    def _default_to_dict(
+        self, default_value: DefaultValue, unit: str | None
+    ) -> dict | list[dict]:
+        """Convert a default value and unit to a dictionary representation.
+
+        Args:
+            default_value: The default value to serialize.
+            unit: The unit of the default value.
+
+        Returns:
+            Dictionary with 'default_value' and 'unit' keys.
+
+        Raises:
+            ValueError: If the default value type is not serializable.
+        """
+        default_value = self._convert_default_value_to_serializable(default_value)
 
         if isinstance(default_value, dict) or (
             isinstance(default_value, list) and self.name == "conversion_factor"
@@ -529,7 +653,7 @@ class Attribute:
         # serialize to dictionary
         default_dict = {
             "default_value": default_value,
-            "unit": self._format_unit(),
+            "unit": self._format_unit(unit),
         }
 
         # add base_technology if necessary
@@ -568,8 +692,22 @@ class Attribute:
             file_path = os.path.join(folder_path, f"{self.name}_{year}.csv")
             df.to_csv(file_path)
 
-    def _convert_default_value_to_serializable(self) -> Any:
+        for scenario in self.scenarios.values():
+            for file_name, df in scenario.data_files(self.name).items():
+                logger.info(
+                    f"Saving data of scenario '{scenario.name}' for attribute "
+                    f"'{self.name}' of element '{element_name}' ..."
+                )
+                file_path = os.path.join(folder_path, f"{file_name}.csv")
+                df.to_csv(file_path)
+
+    def _convert_default_value_to_serializable(
+        self, default_value: DefaultValue
+    ) -> Any:
         """Convert default value to a serializable format.
+
+        Args:
+            default_value: The default value to convert.
 
         Returns:
             The default value in a format suitable for JSON serialization.
@@ -577,22 +715,25 @@ class Attribute:
         Raises:
             ValueError: If the default value has an unsupported type.
         """
-        if self.default_value == np.inf:
+        if default_value == np.inf:
             return "inf"
         elif isinstance(
-            self.default_value, (int, float, np.integer, np.floating)
-        ) and not isinstance(self.default_value, bool):
-            return float(self.default_value)
-        elif isinstance(self.default_value, list):
-            return self._handle_list_default_value()
+            default_value, (int, float, np.integer, np.floating)
+        ) and not isinstance(default_value, bool):
+            return float(default_value)
+        elif isinstance(default_value, list):
+            return self._handle_list_default_value(default_value)
         else:
             raise ValueError(
                 f"Attribute '{self.name}' has unsupported default value type: "
-                f"{type(self.default_value).__name__}."
+                f"{type(default_value).__name__}."
             )
 
-    def _handle_list_default_value(self) -> Any:
+    def _handle_list_default_value(self, default_value: list) -> Any:
         """Handle serialization of list-type default values.
+
+        Args:
+            default_value: The list default value to serialize.
 
         Returns:
             Serialized form of the list default value.
@@ -601,9 +742,9 @@ class Attribute:
             ValueError: If the list default value is not supported.
         """
         if self.name == "conversion_factor":
-            return self.default_value
+            return default_value
         elif self.name in _ATTRIBUTES_SUPPORTING_LISTS:
-            return {"default_value": self.default_value}
+            return {"default_value": default_value}
         else:
             raise ValueError(
                 f"Attribute '{self.name}' has a list as default value, which is not "
@@ -611,16 +752,18 @@ class Attribute:
                 "output_carrier, and retrofit_reference_carrier support list values."
             )
 
-    def _format_unit(self) -> str:
+    def _format_unit(self, unit: str | None) -> str:
         """Format the unit string by applying standard replacements.
+
+        Args:
+            unit: The unit string to format.
 
         Returns:
             Formatted unit string.
         """
-        if self.unit is None:
+        if unit is None:
             return ""
 
-        unit = self.unit
         for old, new in _UNIT_REPLACEMENTS.items():
             unit = unit.replace(old, new)
 
@@ -629,7 +772,7 @@ class Attribute:
 
     @staticmethod
     def _remove_safe_parentheses(unit):
-        """
+        r"""
         Remove parentheses around substrings that don't contain '(', ')', '*' or '/'.
 
         Pattern explanation:

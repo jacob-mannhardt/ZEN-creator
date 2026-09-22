@@ -106,7 +106,7 @@ jobs:
         if: ${{ env.SKIPTESTS == 'false' }}
         uses: conda-incubator/setup-miniconda@v3
         with:
-            miniforge-variant: Miniforge3
+            miniforge-scenario: Miniforge3
             miniforge-version: latest
             activate-environment: zen-creator-env
             use-mamba: true

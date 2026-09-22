@@ -32,6 +32,7 @@ from .utils.config import (
     TechnologyConfig,
     TransportTechnologyConfig,
 )
+from .utils.scenario import Scenario, Sweep
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
@@ -55,6 +56,8 @@ __all__ = [
     "DatasetCollectionConfig",
     "TechnoEconomicDataset",
     "Attribute",
+    "Scenario",
+    "Sweep",
     "SourceInformation",
     "AssumptionInformation",
     "TechnologyConfig",

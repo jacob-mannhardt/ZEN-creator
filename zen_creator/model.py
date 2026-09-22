@@ -2,7 +2,7 @@ import json
 import logging
 import shutil
 from pathlib import Path
-from typing import Iterable, Optional, Type
+from typing import Callable, Iterable, Optional, Type
 
 from zen_creator.elements import (
     Carrier,
@@ -22,6 +22,7 @@ from zen_creator.elements import (
 from zen_creator.elements.element import Element
 from zen_creator.sectors import Sector
 from zen_creator.utils.config import Config, ElementTypeList
+from zen_creator.utils.scenario import SETTING_BLOCKS, ScenarioRegistry
 from zen_creator.utils.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,8 @@ class Model:
             "energy_system" folder of the ZEN-garden input data.
         elements (dict[str, Element]): Dictionary of elements (carriers and
             technologies) present in the model.
+        scenarios (ScenarioRegistry): Registry of all scenarios of the model,
+            written to "scenarios.json".
     """
 
     def __init__(self) -> None:
@@ -64,6 +67,7 @@ class Model:
         # initialize other attributes
         self.elements: dict[str, Element] = {}
         self.sectors: set[str] = set()
+        self.scenarios: ScenarioRegistry = ScenarioRegistry(self)
 
         # shared stack of (element, attribute_name) frames currently being
         # auto-built, used to detect cyclic cross-attribute/cross-element
@@ -98,7 +102,9 @@ class Model:
             config if isinstance(config, Config) else Config.load_from_yaml(config)
         )
         model.settings = (
-            Settings() if isinstance(config, Config) else Settings.load_from_yaml(config)
+            Settings()
+            if isinstance(config, Config)
+            else Settings.load_from_yaml(config)
         )
         model.name = model.config.name
         model.output_folder = model.config.output_folder
@@ -106,6 +112,9 @@ class Model:
 
         insert = model.config.elements.insert
         exclude = model.config.elements.exclude
+
+        # initialize scenarios defined in the configuration file
+        model._initialize_scenarios(model.config.scenarios)
 
         # initialize energy system
         model._initialize_energy_system(insert.energy_system)
@@ -185,6 +194,30 @@ class Model:
             element.overwrite_from_existing_model(existing_model_path)
 
         return model
+
+    def _initialize_scenarios(self, scenarios: dict[str, dict]) -> None:
+        """Add the scenarios declared in the configuration file.
+
+        Only the settings of system.json, analysis.json, and the solver can be
+        varied this way. Variations of element data are attached to the
+        attributes themselves.
+
+        Args:
+            scenarios: Mapping of scenario name to its configuration overrides.
+
+        Raises:
+            ValueError: If a scenario contains a block other than 'system',
+                'analysis', or 'solver'.
+        """
+        for name, blocks in scenarios.items():
+            unknown = set(blocks) - set(SETTING_BLOCKS)
+            if unknown:
+                raise ValueError(
+                    f"Scenario '{name}' in the configuration file contains "
+                    f"{sorted(unknown)}. Only {', '.join(SETTING_BLOCKS)} can be "
+                    "set in the configuration file."
+                )
+            self.scenarios.add(name, **blocks)
 
     def _initialize_energy_system(self, energy_system_name: str) -> None:
         """Initialize the model's energy system instance.
@@ -802,8 +835,38 @@ class Model:
         for element in self.elements.values():
             logging.info(
                 f"-------- Build {element.__class__.__bases__[0].__name__} "
-                f"{element.name} --------")
+                f"{element.name} --------"
+            )
             element.build()
+
+    def apply_global_scenarios(
+        self, define_global_scenarios: Callable[["Model"], None]
+    ) -> None:
+        """Run a project's global scenario definitions.
+
+        Called after :meth:`build`, once every element's own scenario
+        variations have been registered. ``define_global_scenarios`` may add
+        system, analysis, and solver overrides (``model.scenarios.add``) and
+        set-wide entries (``model.scenarios.add_set``), typically guided by
+        ``model.settings``. It may not add element-level scenarios: those are
+        defined where the attribute itself is set, via
+        ``Attribute.set_data(scenarios=...)``.
+
+        Args:
+            define_global_scenarios: Function that registers scenarios on this
+                model, typically defined in a project's ``global_scenarios.py``.
+
+        Raises:
+            ValueError: If ``define_global_scenarios`` tries to register an
+                element-level scenario.
+
+        Examples:
+            >>> model.build()
+            >>> model.apply_global_scenarios(define_global_scenarios)
+            >>> model.write()
+        """
+        with self.scenarios.global_scope():
+            define_global_scenarios(self)
 
     # -------- Write model -----------------------------------------------------
 
@@ -840,14 +903,22 @@ class Model:
         for element in self.elements.values():
             element.write()
 
+        # write scenarios.json
+        self.write_scenario_file()
+
         logger.info("Done writing model")
 
     def write_system_file(self) -> None:
         """Write the system.json file for the model.
 
         This method generates the system configuration dictionary and writes it
-        to system.json in the output directory.
+        to system.json in the output directory. The scenario analysis is turned
+        on whenever the model defines scenarios.
         """
+        # turn on the scenario analysis if scenarios are defined
+        if self.scenarios:
+            self.config.system.conduct_scenario_analysis = True
+
         # convert the Pydantic model instance to a dictionary
         system_json = self.config.system.model_dump(exclude_none=True)
 
@@ -875,17 +946,34 @@ class Model:
         with open(self.output_path / "system.json", "w") as f:
             json.dump(system_json, f, indent=4)
 
+    def write_scenario_file(self) -> None:
+        """Write the scenarios.json file for the model.
+
+        The file is only written if the model defines scenarios.
+        """
+        if not self.scenarios:
+            return
+
+        logger.info(f"Writing {len(self.scenarios)} scenarios to 'scenarios.json'")
+
+        with open(self.output_path / "scenarios.json", "w") as f:
+            json.dump(self.scenarios.to_dict(), f, indent=4)
+
     # -------- Validate model ------------------------------------------------------
 
     def validate(self) -> None:
         """Validate the model for completeness and consistency.
 
-        This method checks that the energy system is defined and that all
-        carriers used in technologies are present in the model.
+        This method checks that the energy system is defined, that all
+        carriers used in technologies are present in the model, and that all
+        scenarios refer to elements of the model.
         """
         # check that all carriers of technologies are defined
         self._check_energy_system()
         self._check_carriers()
+
+        # check that all scenarios refer to elements of the model
+        self.scenarios.validate()
 
     def _check_energy_system(self) -> None:
         """
