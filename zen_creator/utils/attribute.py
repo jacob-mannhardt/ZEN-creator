@@ -44,6 +44,24 @@ _ATTRIBUTES_SUPPORTING_LISTS = {
 
 _ATTRIBUTES_SUPPORTING_BASE_TECHNOLOGY = {"retrofit_flow_coupling_factor"}
 
+_ATTRIBUTES_REQUIRING_INT = {
+    "lifetime",
+    "construction_time",
+}
+
+_ATTRIBUTES_REQUIRING_UNIT_ONE = {
+    "lifetime",
+    "construction_time",
+    "min_load",
+    "max_load",
+    "max_diffusion_rate",
+}
+# Attributes whose df must be a Series named after the attribute (or a DataFrame
+# with a column named after it). Unlike most attributes, whose df columns may be
+# a subset of nodes, edges, or time steps, these are always long-format capacity
+# series, so the name can be checked.
+_ATTRIBUTES_REQUIRING_NAMED_DF = {"capacity_existing", "capacity_existing_energy"}
+
 _ALLOWED_DF_INDEX_NAMES = {
     "time",
     "year",
@@ -62,6 +80,12 @@ _ALLOWED_YEARLY_VARIATIONS_INDEX_NAMES = {
     "edge",
     "carrier",
     "technology",
+}
+
+_INT_INDEX_NAMES = {
+    "year",
+    "year_construction",
+    "time"
 }
 
 _UNIT_REPLACEMENTS = {
@@ -220,6 +244,17 @@ class Attribute:
         """
         if isinstance(value, list):
             self._validate_list_default_value(value)
+        elif self.name in _ATTRIBUTES_REQUIRING_INT:
+            if not isinstance(value, (int, np.integer)) and value is not np.nan:
+                raise ValueError(
+                    f"Attribute '{self.name}' of {self.element.name} default value "
+                    f"must be an integer. Got {type(value).__name__} ({value})."
+                )
+        elif self.name in _ATTRIBUTES_SUPPORTING_LISTS:
+                raise ValueError(
+                    f"Attribute '{self.name}' default value must be a list. "
+                    f"Got {type(value).__name__}."
+                )
         elif value is not None and not isinstance(
             value, (float, int, np.integer, np.floating)
         ):
@@ -265,8 +300,29 @@ class Attribute:
         """Set the unit of measurement.
 
         Args:
-            value: The unit string (e.g., 'MW', 'EUR/MW').
+            value: The unit string (e.g., 'MW', 'Euro/MW').
+
+        Raises:
+            ValueError: If the unit does not match what this attribute requires.
         """
+        if value is not None and "year" in value:
+            raise ValueError(
+                f"Attribute '{self.name}' unit should not contain 'year'. "
+                f"Got '{value}'."
+            )
+        if self.name in _ATTRIBUTES_REQUIRING_UNIT_ONE and value != "1":
+            raise ValueError(
+                f"Attribute '{self.name}' unit must be '1'. Got '{value}'."
+            )
+
+        # if self.name == "opex_specific_fixed" and value is not None:
+        #     power_unit = self.element.power_unit
+        #     allowed_units = {f"Euro/{power_unit}", f"Euro/({power_unit})"}
+        #     if value not in allowed_units:
+        #         raise ValueError(
+        #             f"Attribute '{self.name}' unit must be 'Euro/{power_unit}'. "
+        #             f"Got '{value}'."
+        #         )
         self._unit = value
 
     @property
@@ -291,6 +347,8 @@ class Attribute:
                     f"of element '{self.element.name}'."
                 )
             self._validate_dataframe_indices(value, _ALLOWED_DF_INDEX_NAMES)
+            value = self._validate_integer_indices(value)
+            self._validate_dataframe_name(value)
 
         self._df = value
 
@@ -324,6 +382,7 @@ class Attribute:
             self._validate_dataframe_indices(
                 value, _ALLOWED_YEARLY_VARIATIONS_INDEX_NAMES
             )
+            value = self._validate_integer_indices(value)
 
         self._yearly_variations_df = value
 
@@ -361,6 +420,8 @@ class Attribute:
                     f"Year key '{year}' in year_specific_dfs must be an integer."
                 )
             self._validate_dataframe_indices(df, _ALLOWED_YEARLY_VARIATIONS_INDEX_NAMES)
+            
+            value[year] = self._validate_integer_indices(df)
 
         self._year_specific_dfs = value
 
@@ -517,10 +578,13 @@ class Attribute:
             self._validate_default_value(scenario.default_value)
         if scenario.df is not None:
             self._validate_dataframe_indices(scenario.df, _ALLOWED_DF_INDEX_NAMES)
+            scenario.df = self._validate_integer_indices(scenario.df)
         if scenario.yearly_variations_df is not None:
             self._validate_dataframe_indices(
                 scenario.yearly_variations_df, _ALLOWED_YEARLY_VARIATIONS_INDEX_NAMES
             )
+            scenario.yearly_variations_df = self._validate_integer_indices(
+                scenario.yearly_variations_df)
 
     # ---------- Model Data Methods ----------
 
@@ -842,6 +906,36 @@ class Attribute:
                             "'default_value' and 'unit' keys."
                         )
 
+    def _validate_dataframe_name(self, value: DataFrame) -> None:
+        """Validate that a capacity_existing(_energy) df is labeled with the attribute name.
+
+        Args:
+            value: The DataFrame or Series to validate.
+
+        Raises:
+            ValueError: If a Series isn't named after the attribute, or a
+                DataFrame has no column named after the attribute.
+        """
+        # TODO implement for all attributes, not just capacity_existing(_energy)
+        # figure out how to handle the case where a DataFrame has multiple columns,
+        # which are a subset of the nodes/edges/time steps. 
+        # In that case, we can't check the name.
+        if self.name not in _ATTRIBUTES_REQUIRING_NAMED_DF:
+            return
+
+        if isinstance(value, pd.Series):
+            if value.name != self.name:
+                raise ValueError(
+                    f"df for attribute '{self.name}' of element '{self.element.name}' "
+                    f"must be a Series named '{self.name}'. Got '{value.name}'."
+                )
+        elif self.name not in value.columns:
+            raise ValueError(
+                f"df for attribute '{self.name}' of element '{self.element.name}' "
+                f"must have a column named '{self.name}'. Got columns "
+                f"{list(value.columns)}."
+            )
+
     def _validate_dataframe_indices(self, df: DataFrame, allowed_names: set) -> None:
         """Validate DataFrame index names against allowed values.
 
@@ -858,3 +952,46 @@ class Attribute:
                 f"Invalid index names {invalid_indices} in attribute '{self.name}'. "
                 f"Allowed names are: {', '.join(sorted(allowed_names))}."
             )
+
+    def _validate_integer_indices(self, df: DataFrame) -> None:
+        """Validate that integer indices are of integer type or can be converted.
+        Args:
+            df: The DataFrame to validate.
+
+        Raises:
+            ValueError: If any integer index is not of integer type or cannot be converted.
+
+        Returns: 
+            df: The validated or converted DataFrame.
+        """
+        int_indices = [name for name in df.index.names if name in _INT_INDEX_NAMES]
+        for name in int_indices:
+            level_values = df.index.get_level_values(name)
+            if pd.api.types.is_integer_dtype(level_values):
+                continue
+            _is_numeric = pd.api.types.is_numeric_dtype(level_values)
+            try:
+                parsed = level_values.astype(int)
+            except (ValueError, TypeError):
+                parsed = None
+            if parsed is None or (_is_numeric and not parsed.equals(level_values)):
+                raise ValueError(
+                    f"Index '{name}' in attribute '{self.name}' of "
+                    f"element '{self.element.name}' must be of integer "
+                    f"type. Got {level_values.dtype} and cannot be converted to integer."
+                )
+            logger.warning(
+                f"Index '{name}' in attribute '{self.name}' of "
+                f"element '{self.element.name}' is of type "
+                f"{level_values.dtype} instead of integer, but parses cleanly as integer.\n"
+                "Convert the index to integer type to avoid this warning."
+            )
+            if isinstance(df.index, pd.MultiIndex):
+                level_pos = df.index.names.index(name)
+                df.index = df.index.set_levels(
+                    df.index.levels[level_pos].astype(int), level=name
+                )
+            else:
+                df.index = df.index.astype(int)
+
+        return df

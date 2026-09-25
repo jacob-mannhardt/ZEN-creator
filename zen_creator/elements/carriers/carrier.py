@@ -59,7 +59,7 @@ class Carrier(Element, ABC):
         )
         self._availability_import_yearly = Attribute(
             "availability_import_yearly",
-            default_value=0.0,
+            default_value=np.inf,
             unit=self.energy_unit,
             element=self,
         )
