@@ -30,6 +30,10 @@ class ConversionTechnology(Technology, ABC):
             "capex_specific_conversion",
             "conversion_factor",
             "min_full_load_hours_fraction",
+            "demand_share_min",
+            "demand_share_max",
+            "input_share_min",
+            "input_share_max",
         ]
         self._attribute_names.extend(self._subclass_attribute_names)
 
@@ -60,6 +64,18 @@ class ConversionTechnology(Technology, ABC):
         )
         self._output_carrier = Attribute(
             name="output_carrier", default_value=[], element=self
+        )
+        self._demand_share_min = Attribute(
+            name="demand_share_min", default_value=0, unit="1", element=self
+        )
+        self._demand_share_max = Attribute(
+            name="demand_share_max", default_value=1, unit="1", element=self
+        )
+        self._input_share_min = Attribute(
+            name="input_share_min", default_value=0, unit="1", element=self
+        )
+        self._input_share_max = Attribute(
+            name="input_share_max", default_value=1, unit="1", element=self
         )
 
     # ---------- Properties ----------
@@ -122,6 +138,42 @@ class ConversionTechnology(Technology, ABC):
     def min_full_load_hours_fraction(self, value: Attribute) -> None:
         self._validate_attribute(value)
         self._min_full_load_hours_fraction = value
+
+    @property
+    def demand_share_min(self) -> Attribute:
+        return self._demand_share_min
+
+    @demand_share_min.setter
+    def demand_share_min(self, value: Attribute) -> None:
+        self._validate_attribute(value)
+        self._demand_share_min = value
+
+    @property
+    def demand_share_max(self) -> Attribute:
+        return self._demand_share_max
+
+    @demand_share_max.setter
+    def demand_share_max(self, value: Attribute) -> None:
+        self._validate_attribute(value)
+        self._demand_share_max = value
+
+    @property
+    def input_share_min(self) -> Attribute:
+        return self._input_share_min
+
+    @input_share_min.setter
+    def input_share_min(self, value: Attribute) -> None:
+        self._validate_attribute(value)
+        self._input_share_min = value
+
+    @property
+    def input_share_max(self) -> Attribute:
+        return self._input_share_max
+
+    @input_share_max.setter
+    def input_share_max(self, value: Attribute) -> None:
+        self._validate_attribute(value)
+        self._input_share_max = value
 
     # ---------- Mandatory attributes to be filled for each technology --------
 
