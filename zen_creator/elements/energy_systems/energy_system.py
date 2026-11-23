@@ -99,7 +99,7 @@ class EnergySystem(Element, ABC):
                         author=["Löffler, Konstantin"],
                         publication_year=2021,
                         publication="Environmental Research Letters",
-                        doi="10.1088/1748-9326/ac228a",
+                        doi="https://doi.org/10.1088/1748-9326/ac228a",
                     ),
                 )
             ],
@@ -127,7 +127,7 @@ class EnergySystem(Element, ABC):
                         author=["Leibowicz, B. D.", "Krey, V.", "Grubler, A."],
                         publication="Technological Forecasting and Social Change",
                         publication_year=2016,
-                        doi="10.1016/j.techfore.2015.06.001",
+                        doi="https://doi.org/10.1016/j.techfore.2015.06.001",
                     ),
                 )
             ],
@@ -150,7 +150,7 @@ class EnergySystem(Element, ABC):
                         author=["Mannhardt, J.", "Gabrielli, P.", "Sansavini, G."],
                         publication="iScience",
                         publication_year=2024,
-                        doi="10.1016/j.isci.2024.111369",
+                        doi="https://doi.org/10.1016/j.isci.2024.111369",
                     ),
                 )
             ],

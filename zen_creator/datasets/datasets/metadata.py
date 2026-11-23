@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import Dict, Optional, Union
 
-from pydantic import ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator, model_validator
 from typing_extensions import TypeAliasType
 
 from zen_creator.utils.config import Subscriptable
@@ -20,8 +21,13 @@ class MetaData(Subscriptable):
         author: List of authors or organizations responsible for publishing.
         publication: Name of the journal, conference, or publication venue.
         publication_year: Year the dataset or publication was released.
-        url: Optional web URL pointing to the dataset or publication.
-        doi: Optional Digital Object Identifier (DOI) for persistent citation.
+        url: Web URL pointing to the dataset or publication. A url or a doi
+            is required.
+        doi: Digital Object Identifier (DOI) for persistent citation.
+            Write it as a link (``https://doi.org/10.1234/example``) so it can be
+            clicked in the source; it is stored as the bare DOI
+            (``10.1234/example``). Bare, ``doi:`` and ``dx.doi.org`` forms are
+            accepted too.
     """
 
     model_config = ConfigDict(strict=True)
@@ -34,6 +40,22 @@ class MetaData(Subscriptable):
     url: Optional[str] = None
     doi: Optional[str] = None
     note: Optional[str] = None
+
+    @field_validator("doi")
+    @classmethod
+    def _strip_doi_prefix(cls, value: Optional[str]) -> Optional[str]:
+        """Store the bare DOI, whether given as link, ``doi:`` or bare."""
+        if value is None:
+            return None
+        prefix = r"^(https?://(dx\.)?doi\.org/|doi:)"
+        return re.sub(prefix, "", value.strip(), flags=re.IGNORECASE)
+
+    @model_validator(mode="after")
+    def _require_url_or_doi(self) -> MetaData:
+        """Every source must be traceable, by a URL or a DOI."""
+        if not (self.url or self.doi):
+            raise ValueError(f"MetaData '{self.name}' needs a url or a doi.")
+        return self
 
     def to_dict(self) -> dict[str, object]:
         """Serialize metadata to a dictionary.
